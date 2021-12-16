@@ -6,7 +6,7 @@ using Microsoft.Azure.WebJobs.Extensions.DurableTask;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Logging;
 
-namespace FunctionAppDemo;
+namespace FunctionAppDemo.Functions;
 
 public class ChainFunction
 {
@@ -37,8 +37,8 @@ public class ChainFunction
         return Task.FromResult($"Hello {name}!");
     }
 
-    [FunctionName(nameof(HttpTrigger))]
-    public async Task<HttpResponseMessage> HttpTrigger(
+    [FunctionName(nameof(TriggerChain))]
+    public async Task<HttpResponseMessage> TriggerChain(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestMessage req,
         [DurableClient] IDurableOrchestrationClient starter)
     {
