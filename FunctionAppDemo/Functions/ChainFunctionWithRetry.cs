@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using DurableTask.Core.Exceptions;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.DurableTask;
 using Microsoft.Azure.WebJobs.Extensions.Http;
@@ -38,13 +39,14 @@ public class ChainFunctionWithRetry
 
         try
         {
-            var outputs = new List<string>();
+            var outputs = new List<string>
+            {
+                await context.CallActivityWithRetryAsync<string>(nameof(LegacyCall), retryOptions, "Grodno"),
+                await context.CallActivityWithRetryAsync<string>(nameof(LegacyCall), retryOptions, "Seattle"),
+                await context.CallActivityWithRetryAsync<string>(nameof(LegacyCall), retryOptions, "London")
+            };
 
-            outputs.Add(await context.CallActivityWithRetryAsync<string>(nameof(LegacyCall), retryOptions,"Grodno"));
-            outputs.Add(await context.CallActivityWithRetryAsync<string>(nameof(LegacyCall), retryOptions, "Seattle"));
-            outputs.Add(await context.CallActivityWithRetryAsync<string>(nameof(LegacyCall), retryOptions, "London"));
-
-            _logger.LogInformation("Processing finished!");
+            _logger.LogInformation("Processing finished.");
 
             return outputs;
         }
@@ -55,22 +57,22 @@ public class ChainFunctionWithRetry
             {
                 var waitInterval = context.CurrentUtcDateTime.Add(TimeSpan.FromSeconds(3));
                 await context.CreateTimer(waitInterval, CancellationToken.None);
-
-                var instanceId = context.StartNewOrchestration(nameof(RunChainOrchestratorWithRetry), ++retryAttempt);
-                _logger.LogInformation($"Scheduled retry orchestration with ID = '{instanceId}'. Attempt {retryAttempt}");
-            }
-            else
-            {
-                _logger.LogError("Processing failed.");
+                context.ContinueAsNew(++retryAttempt);
+                return null;
             }
 
+            _logger.LogError("Processing failed!");
             throw;
         }
     }
 
     private static bool IsTransientException(Exception exception)
     {
-        return true;
+        if (exception is TaskFailedException taskException)
+        {
+            exception = taskException.InnerException;
+        }
+
         if (exception is RestClientApiException responseException)
         {
             return responseException.StatusCode switch
